@@ -1,0 +1,561 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>VidPipe</title>
+<script src="https://cdn.jsdelivr.net/npm/hls.js@latest/dist/hls.min.js"></script>
+<style>
+  :root {
+    --bg: #0a0a0a;
+    --surface: #141414;
+    --surface2: #1e1e1e;
+    --border: #2a2a2a;
+    --text: #f0f0f0;
+    --muted: #888;
+    --accent: #ff4444;
+    --accent2: #ff6b35;
+    --radius: 10px;
+    --font: 'DM Sans', sans-serif;
+  }
+  @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600&family=DM+Mono:wght@400;500&display=swap');
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: var(--bg); color: var(--text); font-family: var(--font); min-height: 100vh; }
+
+  /* NAV */
+  nav {
+    position: sticky; top: 0; z-index: 100;
+    background: rgba(10,10,10,0.92); backdrop-filter: blur(12px);
+    border-bottom: 1px solid var(--border);
+    display: flex; align-items: center; gap: 24px;
+    padding: 0 24px; height: 56px;
+  }
+  .logo {
+    font-size: 20px; font-weight: 600; letter-spacing: -0.5px;
+    background: linear-gradient(135deg, var(--accent), var(--accent2));
+    -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+    cursor: pointer; user-select: none;
+  }
+  nav .spacer { flex: 1; }
+  .btn {
+    padding: 8px 18px; border-radius: 8px; font-size: 14px;
+    font-family: var(--font); font-weight: 500;
+    cursor: pointer; border: none; transition: all 0.15s;
+  }
+  .btn-primary { background: var(--accent); color: #fff; }
+  .btn-primary:hover { background: #e03030; transform: translateY(-1px); }
+  .btn-ghost { background: var(--surface2); color: var(--text); border: 1px solid var(--border); }
+  .btn-ghost:hover { background: #2a2a2a; }
+
+  /* PAGES */
+  .page { display: none; }
+  .page.active { display: block; }
+
+  /* BROWSE */
+  .browse-header {
+    padding: 32px 24px 16px;
+    display: flex; align-items: center; justify-content: space-between;
+  }
+  .browse-header h1 { font-size: 22px; font-weight: 500; letter-spacing: -0.3px; }
+  .grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+    gap: 20px; padding: 0 24px 48px;
+  }
+  .card {
+    background: var(--surface); border-radius: var(--radius);
+    overflow: hidden; cursor: pointer;
+    transition: transform 0.18s, box-shadow 0.18s;
+    border: 1px solid var(--border);
+  }
+  .card:hover { transform: translateY(-4px); box-shadow: 0 12px 32px rgba(0,0,0,0.5); }
+  .card-thumb {
+    width: 100%; aspect-ratio: 16/9;
+    background: var(--surface2);
+    position: relative; overflow: hidden;
+  }
+  .card-thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
+  .card-thumb .no-thumb {
+    width: 100%; height: 100%;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 36px; color: var(--border);
+  }
+  .card-thumb .duration {
+    position: absolute; bottom: 8px; right: 8px;
+    background: rgba(0,0,0,0.8); color: #fff;
+    font-size: 11px; font-family: 'DM Mono', monospace;
+    padding: 2px 6px; border-radius: 4px;
+  }
+  .card-thumb .status-badge {
+    position: absolute; top: 8px; left: 8px;
+    font-size: 11px; font-weight: 600; padding: 3px 8px;
+    border-radius: 4px; text-transform: uppercase; letter-spacing: 0.5px;
+  }
+  .badge-processing { background: #f59e0b22; color: #f59e0b; border: 1px solid #f59e0b44; }
+  .badge-failed { background: #ef444422; color: #ef4444; border: 1px solid #ef444444; }
+  .badge-ready { display: none; }
+  .card-body { padding: 14px 16px 16px; }
+  .card-title { font-size: 15px; font-weight: 500; line-height: 1.4; margin-bottom: 6px; }
+  .card-meta { font-size: 13px; color: var(--muted); display: flex; gap: 12px; }
+
+  /* EMPTY STATE */
+  .empty {
+    text-align: center; padding: 80px 24px; color: var(--muted);
+  }
+  .empty-icon { font-size: 48px; margin-bottom: 16px; opacity: 0.4; }
+  .empty h2 { font-size: 20px; color: var(--text); margin-bottom: 8px; }
+
+  /* UPLOAD PAGE */
+  .upload-wrap { max-width: 640px; margin: 48px auto; padding: 0 24px; }
+  .upload-wrap h1 { font-size: 22px; font-weight: 500; margin-bottom: 28px; }
+  .form-group { margin-bottom: 20px; }
+  .form-group label { display: block; font-size: 13px; color: var(--muted); margin-bottom: 8px; font-weight: 500; }
+  .form-group input[type=text] {
+    width: 100%; background: var(--surface); border: 1px solid var(--border);
+    color: var(--text); border-radius: 8px; padding: 12px 14px;
+    font-family: var(--font); font-size: 15px; outline: none;
+    transition: border-color 0.15s;
+  }
+  .form-group input[type=text]:focus { border-color: var(--accent); }
+  .drop-zone {
+    border: 2px dashed var(--border); border-radius: var(--radius);
+    padding: 48px 24px; text-align: center; cursor: pointer;
+    transition: border-color 0.2s, background 0.2s;
+    position: relative;
+  }
+  .drop-zone:hover, .drop-zone.drag-over {
+    border-color: var(--accent); background: rgba(255,68,68,0.04);
+  }
+  .drop-zone input[type=file] {
+    position: absolute; inset: 0; opacity: 0; cursor: pointer;
+  }
+  .drop-icon { font-size: 40px; margin-bottom: 12px; opacity: 0.5; }
+  .drop-zone p { font-size: 15px; color: var(--muted); }
+  .drop-zone .file-name { font-size: 14px; color: var(--accent); margin-top: 8px; font-weight: 500; }
+
+  /* PROGRESS */
+  .progress-card {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: var(--radius); padding: 20px; margin-top: 20px;
+    display: none;
+  }
+  .progress-card.visible { display: block; }
+  .progress-label { font-size: 13px; color: var(--muted); margin-bottom: 10px; display: flex; justify-content: space-between; }
+  .progress-bar-bg {
+    background: var(--surface2); border-radius: 4px; height: 6px; overflow: hidden;
+  }
+  .progress-bar-fill {
+    height: 100%; border-radius: 4px;
+    background: linear-gradient(90deg, var(--accent), var(--accent2));
+    width: 0%; transition: width 0.3s;
+  }
+  .progress-status { font-size: 13px; color: var(--muted); margin-top: 10px; }
+  .progress-status.error { color: #ef4444; }
+  .progress-status.success { color: #22c55e; }
+
+  /* PLAYER PAGE */
+  .player-wrap { max-width: 960px; margin: 0 auto; padding: 24px; }
+  .back-btn {
+    background: none; border: none; color: var(--muted);
+    font-size: 14px; cursor: pointer; font-family: var(--font);
+    display: flex; align-items: center; gap: 6px; margin-bottom: 20px;
+    padding: 0; transition: color 0.15s;
+  }
+  .back-btn:hover { color: var(--text); }
+  .video-container {
+    width: 100%; aspect-ratio: 16/9;
+    background: #000; border-radius: var(--radius); overflow: hidden;
+    position: relative;
+  }
+  .video-container video { width: 100%; height: 100%; display: block; }
+  .processing-overlay {
+    position: absolute; inset: 0;
+    display: flex; flex-direction: column;
+    align-items: center; justify-content: center; gap: 16px;
+  }
+  .spinner {
+    width: 40px; height: 40px; border-radius: 50%;
+    border: 3px solid var(--border);
+    border-top-color: var(--accent);
+    animation: spin 0.8s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .video-info { margin-top: 20px; }
+  .video-title { font-size: 20px; font-weight: 500; margin-bottom: 10px; }
+  .video-meta { font-size: 13px; color: var(--muted); display: flex; gap: 16px; flex-wrap: wrap; }
+  .video-meta span { display: flex; align-items: center; gap: 4px; }
+
+  /* TOAST */
+  .toast {
+    position: fixed; bottom: 24px; right: 24px; z-index: 200;
+    background: var(--surface2); border: 1px solid var(--border);
+    color: var(--text); padding: 12px 20px; border-radius: 10px;
+    font-size: 14px; font-weight: 500;
+    transform: translateY(80px); opacity: 0;
+    transition: all 0.25s cubic-bezier(0.34, 1.56, 0.64, 1);
+  }
+  .toast.show { transform: translateY(0); opacity: 1; }
+  .toast.error { border-color: #ef444466; color: #ef4444; }
+  .toast.success { border-color: #22c55e66; color: #22c55e; }
+
+  /* LOADING */
+  .loading { text-align: center; padding: 60px; color: var(--muted); font-size: 14px; }
+</style>
+</head>
+<body>
+
+<nav>
+  <div class="logo" onclick="showPage('browse')">▶ VidPipe</div>
+  <div class="spacer"></div>
+  <button class="btn btn-ghost" onclick="showPage('browse')">Browse</button>
+  <button class="btn btn-primary" onclick="showPage('upload')">↑ Upload</button>
+</nav>
+
+<!-- BROWSE PAGE -->
+<div id="page-browse" class="page active">
+  <div class="browse-header">
+    <h1>Videos</h1>
+    <button class="btn btn-ghost" onclick="loadVideos()">↻ Refresh</button>
+  </div>
+  <div id="grid" class="grid">
+    <div class="loading">Loading videos…</div>
+  </div>
+</div>
+
+<!-- UPLOAD PAGE -->
+<div id="page-upload" class="page">
+  <div class="upload-wrap">
+    <h1>Upload a video</h1>
+    <div class="form-group">
+      <label>Title</label>
+      <input type="text" id="title-input" placeholder="Give your video a title…" />
+    </div>
+    <div class="form-group">
+      <label>File</label>
+      <div class="drop-zone" id="drop-zone">
+        <input type="file" id="file-input" accept="video/*" onchange="onFileSelect(this)">
+        <div class="drop-icon">🎬</div>
+        <p>Drag and drop a video file, or click to browse</p>
+        <div class="file-name" id="file-name"></div>
+      </div>
+    </div>
+    <button class="btn btn-primary" style="width:100%;padding:14px" onclick="startUpload()">
+      Upload &amp; Transcode
+    </button>
+    <div class="progress-card" id="progress-card">
+      <div class="progress-label">
+        <span id="progress-phase">Uploading…</span>
+        <span id="progress-pct">0%</span>
+      </div>
+      <div class="progress-bar-bg">
+        <div class="progress-bar-fill" id="progress-bar"></div>
+      </div>
+      <div class="progress-status" id="progress-status"></div>
+    </div>
+  </div>
+</div>
+
+<!-- PLAYER PAGE -->
+<div id="page-player" class="page">
+  <div class="player-wrap">
+    <button class="back-btn" onclick="showPage('browse')">← Back to browse</button>
+    <div class="video-container" id="video-container">
+      <video id="video-player" controls preload="metadata"></video>
+      <div class="processing-overlay" id="proc-overlay" style="display:none">
+        <div class="spinner"></div>
+        <div style="font-size:14px;color:var(--muted)" id="proc-msg">Processing…</div>
+      </div>
+    </div>
+    <div class="video-info">
+      <div class="video-title" id="video-title">—</div>
+      <div class="video-meta" id="video-meta"></div>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+const API = '/api/videos';
+let hlsInstance = null;
+let statusSource = null;
+let selectedFile = null;
+let currentVideoID = null;
+
+// ── PAGE ROUTING ─────────────────────────────────────────────────────────────
+function showPage(name) {
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+  document.getElementById('page-' + name).classList.add('active');
+  if (name === 'browse') loadVideos();
+}
+
+// ── BROWSE ────────────────────────────────────────────────────────────────────
+async function loadVideos() {
+  const grid = document.getElementById('grid');
+  grid.innerHTML = '<div class="loading">Loading…</div>';
+  try {
+    const res = await fetch(`${API}?limit=50`);
+    const { videos } = await res.json();
+    if (!videos || videos.length === 0) {
+      grid.innerHTML = `
+        <div class="empty" style="grid-column:1/-1">
+          <div class="empty-icon">📭</div>
+          <h2>No videos yet</h2>
+          <p>Upload your first video to get started.</p>
+        </div>`;
+      return;
+    }
+    grid.innerHTML = videos.map(v => cardHTML(v)).join('');
+  } catch (e) {
+    grid.innerHTML = '<div class="empty" style="grid-column:1/-1"><p>Could not load videos. Is the server running?</p></div>';
+  }
+}
+
+function cardHTML(v) {
+  const dur = v.duration_s ? fmtDur(v.duration_s) : '';
+  const thumb = v.thumbnail
+    ? `<img src="${v.thumbnail}" alt="" loading="lazy">`
+    : `<div class="no-thumb">🎬</div>`;
+  const badge = v.status !== 'ready'
+    ? `<div class="status-badge badge-${v.status}">${v.status}</div>` : '';
+  return `
+    <div class="card" onclick="playVideo('${v.id}')">
+      <div class="card-thumb">
+        ${thumb}
+        ${badge}
+        ${dur ? `<div class="duration">${dur}</div>` : ''}
+      </div>
+      <div class="card-body">
+        <div class="card-title">${esc(v.title)}</div>
+        <div class="card-meta">
+          <span>👁 ${v.views.toLocaleString()}</span>
+          ${v.resolution ? `<span>📐 ${v.resolution}</span>` : ''}
+          <span>${timeAgo(v.created_at)}</span>
+        </div>
+      </div>
+    </div>`;
+}
+
+// ── PLAYER ────────────────────────────────────────────────────────────────────
+async function playVideo(id) {
+  showPage('player');
+  currentVideoID = id;
+
+  // Clean up previous
+  if (hlsInstance) { hlsInstance.destroy(); hlsInstance = null; }
+  if (statusSource) { statusSource.close(); statusSource = null; }
+  const player = document.getElementById('video-player');
+  player.src = '';
+
+  document.getElementById('video-title').textContent = '…';
+  document.getElementById('video-meta').innerHTML = '';
+
+  try {
+    const res = await fetch(`${API}/${id}`);
+    const v = await res.json();
+    renderPlayer(v);
+  } catch (e) {
+    toast('Failed to load video', 'error');
+  }
+}
+
+function renderPlayer(v) {
+  document.getElementById('video-title').textContent = v.title;
+  document.getElementById('video-meta').innerHTML = `
+    <span>👁 ${v.views.toLocaleString()} views</span>
+    ${v.duration_s ? `<span>⏱ ${fmtDur(v.duration_s)}</span>` : ''}
+    ${v.resolution ? `<span>📐 ${v.resolution}</span>` : ''}
+    <span>🗓 ${new Date(v.created_at).toLocaleDateString()}</span>
+    ${v.file_size ? `<span>💾 ${fmtSize(v.file_size)}</span>` : ''}
+  `;
+
+  const player = document.getElementById('video-player');
+  const overlay = document.getElementById('proc-overlay');
+  const procMsg = document.getElementById('proc-msg');
+
+  if (v.status === 'ready' && v.hls_url) {
+    overlay.style.display = 'none';
+    player.style.display = 'block';
+    loadHLS(player, v.hls_url);
+    return;
+  }
+
+  // Not ready yet — show overlay and poll via SSE
+  player.style.display = 'none';
+  overlay.style.display = 'flex';
+
+  if (v.status === 'failed') {
+    overlay.innerHTML = `<div style="color:#ef4444;font-size:14px">❌ Transcoding failed: ${esc(v.error || 'unknown error')}</div>`;
+    return;
+  }
+
+  const msgs = { pending: 'Waiting in queue…', processing: 'Transcoding video…' };
+  procMsg.textContent = msgs[v.status] || 'Processing…';
+
+  // SSE for live status updates
+  statusSource = new EventSource(`${API}/${v.id}/status/stream`);
+  statusSource.onmessage = (e) => {
+    const updated = JSON.parse(e.data);
+    if (updated.status === 'ready') {
+      statusSource.close();
+      renderPlayer(updated);
+    } else if (updated.status === 'failed') {
+      statusSource.close();
+      renderPlayer(updated);
+    } else {
+      procMsg.textContent = msgs[updated.status] || 'Processing…';
+    }
+  };
+  statusSource.onerror = () => statusSource.close();
+}
+
+function loadHLS(video, url) {
+  if (Hls.isSupported()) {
+    hlsInstance = new Hls({ maxBufferLength: 30, maxMaxBufferLength: 60 });
+    hlsInstance.loadSource(url);
+    hlsInstance.attachMedia(video);
+    hlsInstance.on(Hls.Events.MANIFEST_PARSED, () => video.play().catch(() => {}));
+  } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
+    // Safari native HLS
+    video.src = url;
+    video.play().catch(() => {});
+  } else {
+    toast('Your browser does not support HLS playback', 'error');
+  }
+}
+
+// ── UPLOAD ────────────────────────────────────────────────────────────────────
+function onFileSelect(input) {
+  selectedFile = input.files[0];
+  document.getElementById('file-name').textContent = selectedFile ? selectedFile.name : '';
+}
+
+const dz = document.getElementById('drop-zone');
+dz.addEventListener('dragover', e => { e.preventDefault(); dz.classList.add('drag-over'); });
+dz.addEventListener('dragleave', () => dz.classList.remove('drag-over'));
+dz.addEventListener('drop', e => {
+  e.preventDefault(); dz.classList.remove('drag-over');
+  const f = e.dataTransfer.files[0];
+  if (f) { selectedFile = f; document.getElementById('file-name').textContent = f.name; }
+});
+
+async function startUpload() {
+  const title = document.getElementById('title-input').value.trim();
+  if (!title) { toast('Please enter a title', 'error'); return; }
+  if (!selectedFile) { toast('Please select a video file', 'error'); return; }
+
+  setProgress(0, 'Initializing…', '');
+
+  try {
+    // 1. Init upload — get video ID
+    const initRes = await fetch(`${API}/init`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ title, file_size: selectedFile.size }),
+    });
+    const { video_id } = await initRes.json();
+
+    // 2. Check resume offset
+    const resumeRes = await fetch(`${API}/${video_id}/resume`);
+    const { resume_bytes } = await resumeRes.json();
+
+    // 3. Upload in 5 MB chunks
+    const CHUNK = 5 * 1024 * 1024;
+    let offset = resume_bytes;
+    const total = selectedFile.size;
+
+    setProgress(Math.round((offset / total) * 100), 'Uploading…', '');
+
+    while (offset < total) {
+      const slice = selectedFile.slice(offset, offset + CHUNK);
+      const end = Math.min(offset + CHUNK, total) - 1;
+
+      const res = await fetch(`${API}/${video_id}/chunk`, {
+        method: 'PUT',
+        headers: { 'Content-Range': `bytes ${offset}-${end}/${total}` },
+        body: slice,
+      });
+      const data = await res.json();
+
+      offset = data.total_received;
+      setProgress(Math.round((offset / total) * 100), 'Uploading…', '');
+
+      if (data.complete) break;
+    }
+
+    setProgress(100, 'Transcoding…', 'Video is being processed. You can leave this page.');
+
+    // 4. Poll status until ready
+    pollStatus(video_id);
+
+  } catch (e) {
+    setProgress(0, '', 'Upload failed: ' + e.message, true);
+    toast('Upload failed', 'error');
+  }
+}
+
+function pollStatus(videoID) {
+  const src = new EventSource(`${API}/${videoID}/status/stream`);
+  src.onmessage = (e) => {
+    const v = JSON.parse(e.data);
+    if (v.status === 'ready') {
+      src.close();
+      setProgress(100, 'Done!', 'Video is ready ✓', false, true);
+      toast('Video ready! 🎉', 'success');
+      setTimeout(() => { showPage('browse'); }, 1800);
+    } else if (v.status === 'failed') {
+      src.close();
+      setProgress(0, 'Failed', v.error || 'Transcoding failed', true);
+      toast('Transcoding failed', 'error');
+    }
+  };
+  src.onerror = () => src.close();
+}
+
+function setProgress(pct, phase, status, isError = false, isSuccess = false) {
+  const card = document.getElementById('progress-card');
+  card.classList.add('visible');
+  document.getElementById('progress-bar').style.width = pct + '%';
+  document.getElementById('progress-pct').textContent = pct + '%';
+  document.getElementById('progress-phase').textContent = phase;
+  const st = document.getElementById('progress-status');
+  st.textContent = status;
+  st.className = 'progress-status' + (isError ? ' error' : isSuccess ? ' success' : '');
+}
+
+// ── HELPERS ───────────────────────────────────────────────────────────────────
+function fmtDur(s) {
+  const m = Math.floor(s / 60), sec = s % 60;
+  const h = Math.floor(m / 60);
+  if (h > 0) return `${h}:${String(m % 60).padStart(2,'0')}:${String(sec).padStart(2,'0')}`;
+  return `${m}:${String(sec).padStart(2,'0')}`;
+}
+function fmtSize(b) {
+  if (b > 1e9) return (b/1e9).toFixed(1) + ' GB';
+  if (b > 1e6) return (b/1e6).toFixed(1) + ' MB';
+  return (b/1e3).toFixed(0) + ' KB';
+}
+function timeAgo(ts) {
+  const d = Math.floor((Date.now() - new Date(ts)) / 1000);
+  if (d < 60) return 'just now';
+  if (d < 3600) return Math.floor(d/60) + 'm ago';
+  if (d < 86400) return Math.floor(d/3600) + 'h ago';
+  return Math.floor(d/86400) + 'd ago';
+}
+function esc(s) {
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+function toast(msg, type = '') {
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.className = 'toast' + (type ? ' ' + type : '');
+  el.classList.add('show');
+  setTimeout(() => el.classList.remove('show'), 3000);
+}
+
+// Initial load
+loadVideos();
+</script>
+</body>
+</html>
