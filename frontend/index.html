@@ -169,6 +169,29 @@
     position: relative;
   }
   .video-container video { width: 100%; height: 100%; display: block; }
+  .quality-btn {
+    position: absolute; bottom: 52px; right: 12px; z-index: 20;
+    background: rgba(0,0,0,0.75); color: #fff; border: none;
+    border-radius: 6px; padding: 5px 12px;
+    font-family: 'DM Mono', monospace; font-size: 12px; font-weight: 500;
+    cursor: pointer; transition: background 0.15s;
+  }
+  .quality-btn:hover { background: rgba(0,0,0,0.9); }
+  .quality-menu {
+    position: absolute; bottom: 84px; right: 12px; z-index: 20;
+    background: rgba(0,0,0,0.85); border-radius: 8px;
+    padding: 6px 0; min-width: 100px;
+    display: none; flex-direction: column;
+  }
+  .quality-menu.open { display: flex; }
+  .quality-menu button {
+    background: none; border: none; color: #ccc;
+    padding: 6px 16px; font-family: 'DM Mono', monospace;
+    font-size: 12px; text-align: left; cursor: pointer;
+    transition: background 0.1s;
+  }
+  .quality-menu button:hover { background: rgba(255,255,255,0.1); color: #fff; }
+  .quality-menu button.active { color: var(--accent); font-weight: 500; }
   .processing-overlay {
     position: absolute; inset: 0;
     display: flex; flex-direction: column;
@@ -262,6 +285,8 @@
     <button class="back-btn" onclick="showPage('browse')">← Back to browse</button>
     <div class="video-container" id="video-container">
       <video id="video-player" controls preload="metadata"></video>
+      <button class="quality-btn" id="quality-btn" onclick="toggleQualityMenu()" style="display:none">Auto</button>
+      <div class="quality-menu" id="quality-menu"></div>
       <div class="processing-overlay" id="proc-overlay" style="display:none">
         <div class="spinner"></div>
         <div style="font-size:14px;color:var(--muted)" id="proc-msg">Processing…</div>
@@ -347,6 +372,8 @@ async function playVideo(id) {
   if (statusSource) { statusSource.close(); statusSource = null; }
   const player = document.getElementById('video-player');
   player.src = '';
+  document.getElementById('quality-btn').style.display = 'none';
+  document.getElementById('quality-menu').classList.remove('open');
 
   document.getElementById('video-title').textContent = '…';
   document.getElementById('video-meta').innerHTML = '';
@@ -415,13 +442,45 @@ function loadHLS(video, url) {
     hlsInstance = new Hls({ maxBufferLength: 30, maxMaxBufferLength: 60 });
     hlsInstance.loadSource(url);
     hlsInstance.attachMedia(video);
-    hlsInstance.on(Hls.Events.MANIFEST_PARSED, () => video.play().catch(() => {}));
+    hlsInstance.on(Hls.Events.MANIFEST_PARSED, () => {
+      buildQualityMenu(hlsInstance.levels);
+      video.play().catch(() => {});
+    });
   } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
     // Safari native HLS
     video.src = url;
     video.play().catch(() => {});
   } else {
     toast('Your browser does not support HLS playback', 'error');
+  }
+}
+
+function buildQualityMenu(levels) {
+  const btn = document.getElementById('quality-btn');
+  const menu = document.getElementById('quality-menu');
+  if (!levels || levels.length <= 1) { btn.style.display = 'none'; return; }
+  btn.style.display = 'block';
+
+  menu.innerHTML = `<button onclick="setQuality(-1)" class="active">Auto</button>`;
+  levels.forEach((lvl, i) => {
+    const label = lvl.height ? lvl.height + 'p' : 'Quality ' + (i + 1);
+    menu.innerHTML += `<button onclick="setQuality(${i})">${label}</button>`;
+  });
+}
+
+function toggleQualityMenu() {
+  document.getElementById('quality-menu').classList.toggle('open');
+}
+
+function setQuality(index) {
+  if (hlsInstance) {
+    hlsInstance.nextLevel = index;
+    const btn = document.getElementById('quality-btn');
+    btn.textContent = index === -1 ? 'Auto' : hlsInstance.levels[index].height + 'p';
+    document.getElementById('quality-menu').classList.remove('open');
+    document.querySelectorAll('#quality-menu button').forEach((b, i) => {
+      b.classList.toggle('active', i - 1 === index);
+    });
   }
 }
 

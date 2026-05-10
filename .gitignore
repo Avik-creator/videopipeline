@@ -1,1 +1,5 @@
 backend/.commandcode
+backend/videos
+backend/videopipe.db
+backend/videopipe.db-shm
+backend/videopipe.db-wal
